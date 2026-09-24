@@ -1,0 +1,118 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and upload to'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            deb_arch: amd64
+          - target: aarch64-unknown-linux-musl
+            deb_arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # musl targets need a C cross-toolchain because rusqlite compiles
+      # SQLite from source. cross supplies one per target via Docker, which
+      # is far less brittle than assembling it on the runner.
+      - name: Install cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build
+        run: cross build --release --locked --target ${{ matrix.target }}
+
+      - name: Resolve version
+        id: v
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$tag"            >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}"    >> "$GITHUB_OUTPUT"
+
+      # A "static" binary that quietly came out dynamic would fail only on
+      # the user's machine, so fail here instead.
+      - name: Verify the binaries are static
+        run: |
+          for bin in clipster clipsterd; do
+            path="target/${{ matrix.target }}/release/$bin"
+            file "$path"
+            if ! file "$path" | grep -q 'statically linked'; then
+              echo "::error::$bin is not statically linked" && exit 1
+            fi
+          done
+
+      - name: Package tarball
+        run: |
+          v='${{ steps.v.outputs.version }}'
+          dir="clipster-$v-${{ matrix.target }}"
+          mkdir -p "stage/$dir"
+          cp target/${{ matrix.target }}/release/clipster \
+             target/${{ matrix.target }}/release/clipsterd "stage/$dir/"
+          cp contrib/clipster-rofi.sh contrib/clipsterd.service \
+             contrib/config.example.toml README.md "stage/$dir/"
+          mkdir -p dist
+          tar -C stage -czf "dist/$dir.tar.gz" "$dir"
+
+      - name: Package .deb
+        run: |
+          packaging/build-deb.sh \
+            --version '${{ steps.v.outputs.version }}' \
+            --arch '${{ matrix.deb_arch }}' \
+            --bin-dir 'target/${{ matrix.target }}/release' \
+            --static
+
+      - name: Checksums
+        run: cd dist && sha256sum * > "SHA256SUMS-${{ matrix.deb_arch }}.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.deb_arch }}
+          path: dist/*
+
+  upload:
+    name: upload to release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - run: ls -la artifacts
+      # gh is preinstalled on the runner, so no third-party release action.
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release view "$tag" >/dev/null 2>&1 \
+            || gh release create "$tag" --title "$tag" --generate-notes
+          gh release upload "$tag" artifacts/* --clobber

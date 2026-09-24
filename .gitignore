@@ -1,4 +1,5 @@
 /target
+/dist
 
 # Machine-local Claude Code settings; personal, not project config.
 .claude/settings.local.json

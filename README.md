@@ -50,6 +50,33 @@ something must never be captured, do not copy it while the daemon is running.
 
 ## Install
 
+### Debian / Ubuntu
+
+```sh
+gh release download v0.1.0 --pattern '*_amd64.deb'   # or *_arm64.deb
+sudo dpkg -i clipster_0.1.0_amd64.deb
+```
+
+### Any distro (prebuilt static binary)
+
+The release tarballs are statically linked against musl, so they carry no
+libc dependency and run on any x86_64 or aarch64 Linux.
+
+```sh
+gh release download v0.1.0 --pattern '*x86_64-unknown-linux-musl.tar.gz'
+tar xzf clipster-0.1.0-x86_64-unknown-linux-musl.tar.gz
+cd clipster-0.1.0-x86_64-unknown-linux-musl
+install -Dm755 clipster clipsterd     -t ~/.local/bin/
+install -Dm755 clipster-rofi.sh        ~/.local/bin/clipster-rofi
+install -Dm644 clipsterd.service       ~/.config/systemd/user/clipsterd.service
+install -Dm644 config.example.toml     ~/.config/clipster/config.toml
+```
+
+While the repository is private, downloads need an authenticated `gh`. Once
+it is public, plain `curl -LO` on the release URL works too.
+
+### From source
+
 Requires a Rust toolchain and a C compiler (SQLite is built from source).
 
 ```sh
@@ -59,14 +86,23 @@ install -Dm755 target/release/clipster   ~/.local/bin/clipster
 install -Dm755 contrib/clipster-rofi.sh  ~/.local/bin/clipster-rofi
 install -Dm644 contrib/clipsterd.service ~/.config/systemd/user/clipsterd.service
 install -Dm644 contrib/config.example.toml ~/.config/clipster/config.toml
-
-systemctl --user daemon-reload
-systemctl --user enable --now clipsterd
 ```
 
-Check it came up:
+To build your own `.deb` from a source checkout:
 
 ```sh
+cargo build --release
+packaging/build-deb.sh            # writes dist/clipster_<version>_<arch>.deb
+```
+
+### Enable the daemon
+
+clipster runs as a systemd **user** service — enable it as yourself, not as
+root. (The `.deb` installs the unit system-wide but cannot enable it for you.)
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now clipsterd
 clipster status
 journalctl --user -u clipsterd -f
 ```

@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace --all-targets
+      - run: cargo build --release --workspace
+
+      # The package script is part of the build surface, so exercise it here
+      # rather than finding out it is broken during a release.
+      - name: Build .deb and check its layout
+        run: |
+          pkg=$(packaging/build-deb.sh)
+          dpkg-deb -I "$pkg"
+          dpkg-deb -c "$pkg"
+          # The packaged unit must point at the packaged binary.
+          dpkg-deb -x "$pkg" /tmp/pkgroot
+          grep -qx 'ExecStart=/usr/bin/clipsterd' /tmp/pkgroot/usr/lib/systemd/user/clipsterd.service
+          test -x /tmp/pkgroot/usr/bin/clipster
+          test -x /tmp/pkgroot/usr/bin/clipsterd
+          test -x /tmp/pkgroot/usr/bin/clipster-rofi
+
+  lint:
+    name: lint (advisory)
+    runs-on: ubuntu-latest
+    # The initial import was hand-formatted and has never been through
+    # rustfmt or clippy, so these are reported but not enforced. Drop this
+    # line once the tree is clean, so regressions start failing the build.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck contrib/clipster-rofi.sh packaging/build-deb.sh
