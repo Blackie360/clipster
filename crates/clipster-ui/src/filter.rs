@@ -28,9 +28,14 @@ pub fn score(haystack: &str, needle: &str) -> Option<i32> {
 
         score += 10;
         // Runs of adjacent characters are what distinguishes a real substring
-        // hit from letters scattered across the line.
-        if previous == Some(at.wrapping_sub(1)) {
-            score += 15;
+        // hit from letters scattered across the line. The distance skipped to
+        // reach a character costs, or "gitcom" ranks a github.com URL above
+        // the `git commit` it was obviously typed to find: both match in two
+        // tight runs, and only the gap between them tells them apart.
+        match previous {
+            Some(prev) if prev + 1 == at => score += 15,
+            Some(prev) => score -= 2 * (at - prev - 1).min(20) as i32,
+            None => {}
         }
         // A match at the start of a word is usually what the user meant.
         if at == 0 || !hay[at - 1].is_alphanumeric() {
@@ -83,6 +88,15 @@ mod tests {
         let early = score("commit template", "commit").unwrap();
         let late = score("the usual commit", "commit").unwrap();
         assert!(early > late, "{early} !> {late}");
+    }
+
+    #[test]
+    fn a_tight_match_beats_one_spread_across_the_line() {
+        // Observed in the picker: "gitcom" hits both of these in two runs,
+        // and without a gap penalty the URL edged out the obvious answer.
+        let commit = score("commit template git commit --amend --no-edit", "gitcom").unwrap();
+        let url = score("https://github.com/rust-lang/rust/pull/128432", "gitcom").unwrap();
+        assert!(commit > url, "{commit} !> {url}");
     }
 
     #[test]

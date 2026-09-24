@@ -274,6 +274,13 @@ impl Picker {
 
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             ui.with_layout(egui::Layout::top_down_justified(Align::LEFT), |ui| {
+                // One entry is one row. Previews are single-line already, but
+                // a long one would wrap and push the age column out of
+                // alignment, so it is elided at the window edge instead. This
+                // has to be set on the style: a widget resolves its own wrap
+                // mode and overwrites whatever the layout job asked for.
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+
                 for row in 0..self.visible.len() {
                     let item = &self.items[self.visible[row]];
                     let selected = row == self.selected;
