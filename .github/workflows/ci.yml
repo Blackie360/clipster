@@ -34,6 +34,37 @@ jobs:
           test -x /tmp/pkgroot/usr/bin/clipsterd
           test -x /tmp/pkgroot/usr/bin/clipster-rofi
 
+      # install.sh is how most people will get clipster, so run it for real
+      # against a tarball shaped like a release one. CLIPSTER_TARBALL skips
+      # the download; everything after it is the same code path users hit.
+      - name: Run install.sh end to end
+        run: |
+          d=clipster-0.0.0-x86_64-unknown-linux-musl
+          mkdir -p "stage/$d"
+          cp target/release/clipster target/release/clipsterd "stage/$d/"
+          cp contrib/clipster-rofi.sh contrib/clipsterd.service \
+             contrib/config.example.toml README.md "stage/$d/"
+          tar -C stage -czf "$d.tar.gz" "$d"
+
+          root=$(mktemp -d)
+          HOME=$root XDG_CONFIG_HOME=$root/.config XDG_DATA_HOME=$root/.local/share \
+            CLIPSTER_TARBALL="$PWD/$d.tar.gz" \
+            sh install.sh --prefix "$root/.local" --no-service
+
+          test -x "$root/.local/bin/clipster"
+          test -x "$root/.local/bin/clipsterd"
+          test -x "$root/.local/bin/clipster-rofi"
+          test -d "$root/.local/share/clipster"        # ReadWritePaths= needs it
+          test -f "$root/.config/clipster/config.toml"
+          grep -qx "ExecStart=$root/.local/bin/clipsterd" \
+            "$root/.config/systemd/user/clipsterd.service"
+          "$root/.local/bin/clipster" --version
+
+          HOME=$root XDG_CONFIG_HOME=$root/.config XDG_DATA_HOME=$root/.local/share \
+            sh install.sh --prefix "$root/.local" --uninstall
+          test ! -e "$root/.local/bin/clipster"
+          test -f "$root/.config/clipster/config.toml"  # config survives removal
+
   lint:
     name: lint (advisory)
     runs-on: ubuntu-latest
@@ -55,4 +86,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck contrib/clipster-rofi.sh packaging/build-deb.sh
+      - run: shellcheck contrib/clipster-rofi.sh packaging/build-deb.sh install.sh

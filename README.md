@@ -53,6 +53,37 @@ something must never be captured, do not copy it while the daemon is running.
 
 ## Install
 
+### One command (recommended)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Blackie360/clipster/main/install.sh | sh
+```
+
+No Rust toolchain, no compiler, no `sudo`. The script picks the right
+prebuilt binary for your architecture (x86_64 or aarch64), verifies its
+checksum, installs into `~/.local/bin`, and enables the `clipsterd` user
+service. The binaries are statically linked against musl, so they have no
+libc or SQLite dependency and run on any Linux distribution; the whole
+install is about 5 MB.
+
+It takes a few options — pipe them after `sh -s --`:
+
+```sh
+curl -fsSL .../install.sh | sh -s -- --version 0.1.0   # pin a release
+curl -fsSL .../install.sh | sh -s -- --prefix ~/apps   # install elsewhere
+curl -fsSL .../install.sh | sh -s -- --no-service      # do not start the daemon
+curl -fsSL .../install.sh | sh -s -- --uninstall       # remove it again
+```
+
+`--uninstall` removes the binaries and the unit, and leaves your history and
+config alone. If you would rather read the script before running it, it is
+[`install.sh`](install.sh) — download it, read it, then `sh install.sh`.
+
+The picker window (`clipster-ui`) is **not** part of this install: it links
+OpenGL and triples the download for a window you see for three seconds. The
+`clipster-rofi` script that ships with it drives rofi, fuzzel or dmenu
+instead. Build `clipster-ui` from source if you want the native window.
+
 ### Debian / Ubuntu
 
 ```sh
@@ -75,12 +106,14 @@ install -Dm644 clipsterd.service       ~/.config/systemd/user/clipsterd.service
 install -Dm644 config.example.toml     ~/.config/clipster/config.toml
 ```
 
-While the repository is private, downloads need an authenticated `gh`. Once
-it is public, plain `curl -LO` on the release URL works too.
+While the repository is private, downloads need an authenticated `gh`; the
+install script covers that case too, if `gh auth login` has been run or
+`GITHUB_TOKEN` is set. Once the repository is public, neither is needed.
 
 ### From source
 
-Requires a Rust toolchain and a C compiler (SQLite is built from source).
+Only needed to hack on clipster or to build the picker window; the install
+script above requires none of this. Requires a Rust toolchain and a C compiler (SQLite is built from source).
 The picker additionally needs OpenGL and the usual X11/Wayland client
 libraries at runtime; it is dlopened, so there is nothing extra to install
 at build time on a normal desktop.
@@ -263,7 +296,7 @@ rather than a setting that silently does nothing.
 ## Development
 
 ```sh
-cargo test          # 32 tests, storage + config + preview + filter logic
+cargo test          # 33 tests, storage + config + preview + filter logic
 cargo build         # debug
 cargo build --release
 cargo build -p clipster --release   # CLI and daemon only, no GUI toolkit
