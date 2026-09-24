@@ -79,7 +79,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
         [ -e "$f" ] && rm -f "$f" && info "removed $f"
     done
     rm -rf "$DOC_DIR"
-    user_systemd && systemctl --user daemon-reload || true
+    if user_systemd; then systemctl --user daemon-reload || true; fi
     printf '\nclipster removed. History and config were kept:\n'
     info "$DATA_DIR"
     info "$CONFIG_DIR"
@@ -199,6 +199,10 @@ STARTED=0
 if [ "$WANT_SERVICE" -eq 1 ] && user_systemd; then
     systemctl --user daemon-reload
     if systemctl --user enable --now clipsterd.service >/dev/null 2>&1; then
+        # On a reinstall the daemon is already up on the old binary and the
+        # old unit, and `enable --now` leaves a running service alone. Restart
+        # so an upgrade actually takes effect.
+        systemctl --user try-restart clipsterd.service >/dev/null 2>&1 || true
         STARTED=1
         info "clipsterd enabled and started"
     else
@@ -209,6 +213,7 @@ fi
 # The local-tarball path never resolved a tag, so ask the binary itself.
 V="$("$BIN_DIR/clipster" --version 2>/dev/null || true)"; V="${V##* }"
 printf '\nclipster %s is installed.\n\n' "${V:-}"
+# shellcheck disable=SC2016  # $PATH is for the user's shell, not ours
 case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
     *) printf 'Add it to your PATH first:\n\n    export PATH="%s:$PATH"\n\n' "$BIN_DIR" ;;
@@ -222,5 +227,6 @@ if [ "$STARTED" -eq 0 ]; then
     printf '    systemctl --user daemon-reload\n    systemctl --user enable --now clipsterd\n\n'
 fi
 printf 'Then:\n\n    clipster status\n    clipster list\n\n'
+# shellcheck disable=SC2016  # $mod is i3 config syntax, not a shell variable
 printf 'Bind the picker to a hotkey, e.g. i3/sway:\n\n    bindsym $mod+v exec --no-startup-id %s/clipster-rofi\n\n' "$BIN_DIR"
 printf 'Config: %s/config.toml   Uninstall: sh install.sh --uninstall\n' "$CONFIG_DIR"

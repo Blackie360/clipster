@@ -416,7 +416,7 @@ dependencies = [
 
 [[package]]
 name = "clipster"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -426,7 +426,7 @@ dependencies = [
 
 [[package]]
 name = "clipster-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "log",
@@ -439,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "clipster-ui"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "clipsterd"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
