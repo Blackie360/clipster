@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/clipster-core", "crates/clipsterd", "crates/clipster"]
+members = ["crates/clipster-core", "crates/clipsterd", "crates/clipster", "crates/clipster-ui"]
 
 [workspace.package]
 version = "0.1.0"

@@ -1,14 +1,11 @@
 //! `clipster` — thin CLI client. All state lives in the daemon; this binary
 //! only marshals a request onto the socket and formats what comes back.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use clap::{Parser, Subcommand, ValueEnum};
+use clipster_core::client::request;
 use clipster_core::ipc::{Item, Request, Response, Summary};
-use clipster_core::paths;
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::UnixStream;
-use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::io::Write;
 
 #[derive(Parser, Debug)]
 #[command(name = "clipster", version, about = "Fast clipboard history for Linux")]
@@ -106,7 +103,7 @@ fn run() -> Result<()> {
 
         Cmd::Copy { id } => {
             let item = fetch(id)?;
-            let tool = to_clipboard(&item.content)?;
+            let tool = clipster_core::clipboard::copy(&item.content)?;
             eprintln!("copied #{} via {}", item.id, tool);
         }
 
@@ -146,30 +143,6 @@ fn run() -> Result<()> {
         },
     }
     Ok(())
-}
-
-/// Send one request, read one response.
-fn request(request: Request) -> Result<Response> {
-    let path = paths::socket_path();
-    let stream = UnixStream::connect(&path).with_context(|| {
-        format!(
-            "cannot reach clipsterd at {}\n       start it with: systemctl --user start clipsterd",
-            path.display()
-        )
-    })?;
-
-    let mut writer = stream.try_clone()?;
-    let mut line = serde_json::to_vec(&request)?;
-    line.push(b'\n');
-    writer.write_all(&line)?;
-    writer.flush()?;
-
-    let mut reader = BufReader::new(stream);
-    let mut response = String::new();
-    if reader.read_line(&mut response)? == 0 {
-        bail!("clipsterd closed the connection without responding");
-    }
-    Ok(serde_json::from_str(&response)?)
 }
 
 /// `Get`/`Copy` share the "id or most recent" lookup.
@@ -253,82 +226,4 @@ fn print_list(items: &[Summary], format: Format) {
 
 fn digits(n: i64) -> usize {
     n.abs().to_string().len()
-}
-
-/// Hand content to an external clipboard tool.
-///
-/// Taking ownership of the X selection directly would mean this process has
-/// to stay alive to serve it, which a one-shot CLI cannot do. Delegating is
-/// the honest MVP answer; the v0.2 picker will have the daemon own it.
-///
-/// X11 tools come first *even on a Wayland session*, because this build
-/// captures through X11. Writing to the Wayland clipboard while watching the
-/// X one means `clipster copy` lands somewhere the daemon cannot see, and the
-/// entry does not move to the top of the history as the user expects. The
-/// ordering becomes backend-aware in v0.3, when capture is too.
-const CLIPBOARD_TOOLS: &[(&str, &[&str])] = &[
-    ("xclip", &["-selection", "clipboard"]),
-    ("xsel", &["--clipboard", "--input"]),
-    ("wl-copy", &[]),
-];
-
-fn to_clipboard(content: &str) -> Result<&'static str> {
-    let mut last_failure = None;
-
-    for (tool, args) in CLIPBOARD_TOOLS {
-        let spawned = Command::new(tool)
-            .args(*args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
-
-        let mut child = match spawned {
-            Ok(child) => child,
-            // Not installed; try the next one.
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(e).with_context(|| format!("spawning {tool}")),
-        };
-
-        child
-            .stdin
-            .take()
-            .expect("stdin was piped")
-            .write_all(content.as_bytes())
-            .with_context(|| format!("writing to {tool}"))?;
-
-        // These tools fork and keep a child alive to serve the selection, so
-        // the parent exiting is expected. What is *not* expected is exiting
-        // non-zero — that means the content went nowhere, and reporting
-        // success there is worse than failing, because the user walks away
-        // believing the clipboard was set.
-        match settled_failure(&mut child) {
-            None => return Ok(tool),
-            Some(status) => last_failure = Some(format!("{tool} exited with {status}")),
-        }
-    }
-
-    match last_failure {
-        Some(reason) => bail!("no clipboard tool succeeded ({reason})"),
-        None => bail!("no clipboard tool found; install one of xclip, xsel or wl-clipboard"),
-    }
-}
-
-/// Give a just-spawned tool a moment to fail, and report the status if it
-/// does. Still running after the grace period counts as success: that is the
-/// normal case, where it has forked to serve the selection.
-fn settled_failure(child: &mut std::process::Child) -> Option<std::process::ExitStatus> {
-    const GRACE: Duration = Duration::from_millis(150);
-    const STEP: Duration = Duration::from_millis(10);
-
-    let deadline = Instant::now() + GRACE;
-    while Instant::now() < deadline {
-        match child.try_wait() {
-            Ok(Some(status)) if status.success() => return None,
-            Ok(Some(status)) => return Some(status),
-            Ok(None) => std::thread::sleep(STEP),
-            Err(_) => return None,
-        }
-    }
-    None
 }

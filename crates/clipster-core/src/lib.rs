@@ -1,10 +1,14 @@
-//! Shared building blocks for `clipsterd` and the `clipster` CLI.
+//! Shared building blocks for `clipsterd`, the `clipster` CLI and the
+//! `clipster-ui` picker.
 
+pub mod clipboard;
+pub mod client;
 pub mod config;
 pub mod ipc;
 pub mod paths;
 pub mod store;
 
+pub use client::request;
 pub use config::Config;
 pub use ipc::{Item, Request, Response, Status, Summary};
 pub use store::Store;

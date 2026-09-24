@@ -3,7 +3,8 @@
 Fast, keyboard-driven clipboard history for Linux. A background daemon
 captures what you copy; a thin CLI gets it back.
 
-**Status: MVP (v0.1).** X11 text capture, CLI, and a rofi/dmenu picker script.
+**Status: MVP (v0.1).** X11 text capture, CLI, a picker window, and a
+rofi/dmenu picker script.
 See [Scope](#what-this-version-does-and-does-not-do) before installing — the
 limits are real and worth reading first.
 
@@ -15,10 +16,12 @@ limits are real and worth reading first.
 | ✅ | SQLite history, deduplicated, with recency ordering |
 | ✅ | Pinning, named snippets, per-app denylist |
 | ✅ | CLI: `list` `get` `copy` `pin` `unpin` `label` `rm` `clear` `status` |
+| ✅ | `clipster-ui` picker window, with fuzzy search |
 | ✅ | rofi / fuzzel / dmenu picker script |
 | ❌ | Native Wayland capture — X11 only, see [below](#wayland) |
 | ❌ | Images and file URIs — text only (v0.3) |
-| ❌ | Native GUI picker, global hotkey, fuzzy search (v0.2) |
+| ❌ | Global hotkey — bind the picker in your WM, clipster grabs no keys |
+| ❌ | Paste-on-select — the picker copies, you paste (v0.2) |
 | ❌ | Encryption at rest (v1.0) — **history is a plaintext SQLite file** |
 
 ### Wayland
@@ -78,11 +81,15 @@ it is public, plain `curl -LO` on the release URL works too.
 ### From source
 
 Requires a Rust toolchain and a C compiler (SQLite is built from source).
+The picker additionally needs OpenGL and the usual X11/Wayland client
+libraries at runtime; it is dlopened, so there is nothing extra to install
+at build time on a normal desktop.
 
 ```sh
 cargo build --release
 install -Dm755 target/release/clipsterd  ~/.local/bin/clipsterd
 install -Dm755 target/release/clipster   ~/.local/bin/clipster
+install -Dm755 target/release/clipster-ui ~/.local/bin/clipster-ui
 install -Dm755 contrib/clipster-rofi.sh  ~/.local/bin/clipster-rofi
 install -Dm644 contrib/clipsterd.service ~/.config/systemd/user/clipsterd.service
 install -Dm644 contrib/config.example.toml ~/.config/clipster/config.toml
@@ -138,20 +145,58 @@ clipster get 42 | wc -c
 ssh host "$(clipster get 42)"
 ```
 
-### Picker hotkey
+### Picker window
 
-Bind `clipster-rofi` to a key. It lists history through rofi (or fuzzel, or
-dmenu) and copies your selection back.
+`clipster-ui` is a single-screen picker: a filter box, the history, a hint
+bar. It opens centred and focused, and closes as soon as you pick something
+or click away — like a menu, not a window you manage.
+
+```sh
+clipster-ui                    # 200 most recent, pinned first
+clipster-ui -n 50              # fewer
+clipster-ui --all              # everything
+clipster-ui --pinned           # snippets only
+clipster-ui --stay-open        # survive losing focus, for debugging
+```
+
+| Key | |
+|---|---|
+| type | fuzzy filter over previews and labels |
+| `↑` `↓`, `ctrl+k` `ctrl+j`, `ctrl+n` | move |
+| `enter`, click | copy and close |
+| `ctrl+p` | pin / unpin |
+| `ctrl+d` | delete |
+| `ctrl+u` | clear the filter |
+| `esc` | close |
+
+It copies to the clipboard; it does not paste for you. Synthesising a paste
+into whichever window had focus needs `xdotool`-style key injection, which
+is a different can of worms — for now, `enter` then `ctrl+v`.
+
+Bind it to a key:
 
 ```
 # i3 / sway
-bindsym $mod+v exec --no-startup-id ~/.local/bin/clipster-rofi
+bindsym $mod+v exec --no-startup-id ~/.local/bin/clipster-ui
 
 # Hyprland
-bind = SUPER, V, exec, ~/.local/bin/clipster-rofi
+bind = SUPER, V, exec, ~/.local/bin/clipster-ui
 ```
 
-A native picker with built-in fuzzy matching replaces this in v0.2.
+The window asks to be undecorated, centred and above other windows. Every
+one of those is a request a compositor may refuse — always-on-top in
+particular is unavailable on Wayland, where a window cannot raise itself. If
+yours places it badly, a rule keyed on the `clipster` app id / `WM_CLASS`
+will fix it.
+
+Launching costs a window and a GPU context, so budget roughly 100ms rather
+than the <50ms the CLI path hits. If that matters more than the window does,
+the rofi script below stays supported.
+
+### Picker hotkey via rofi
+
+`clipster-rofi` does the same job through rofi (or fuzzel, or dmenu), with no
+GUI toolkit involved. Bind it exactly the same way.
 
 ## Configuration
 
@@ -169,6 +214,8 @@ rather than a setting that silently does nothing.
                                              │           │
 ┌──────────────┐   JSON lines / Unix socket  │           │
 │ clipster CLI │ ◄─────────────────────────► │           │
+├──────────────┤                             │           │
+│  clipster-ui │ ◄─────────────────────────► │           │
 └──────────────┘                             └─────┬─────┘
                                                    │
                                           ┌────────▼────────┐
@@ -181,6 +228,13 @@ rather than a setting that silently does nothing.
   what keeps idle CPU at zero); one accepts IPC connections. State is a single
   SQLite connection behind a mutex, which is ample at human clipboard rates.
 - **`clipster`** — holds no state. Marshals a request, formats the response.
+- **`clipster-ui`** — egui, and equally stateless: it holds a query, a
+  selection, and the last list the daemon gave it. Every pin, delete and copy
+  is the same IPC call the CLI makes, through the same
+  [`client`](crates/clipster-core/src/client.rs) and
+  [`clipboard`](crates/clipster-core/src/clipboard.rs) code in core. It does
+  not poll, so entries copied while it is open appear the next time you open
+  it.
 - **IPC** — newline-delimited JSON at
   `$XDG_RUNTIME_DIR/clipster/clipsterd.sock`, mode `0600`. Serialized JSON
   never contains a raw newline, so the framing survives multi-line content.
@@ -209,21 +263,27 @@ rather than a setting that silently does nothing.
 ## Development
 
 ```sh
-cargo test          # 22 tests, storage + config + preview logic
+cargo test          # 32 tests, storage + config + preview + filter logic
 cargo build         # debug
 cargo build --release
+cargo build -p clipster --release   # CLI and daemon only, no GUI toolkit
 ```
+
+`clipster-ui` pins `eframe` to 0.31. egui renames things between minor
+versions (`Margin`, `Frame::none`, `rounding`), so treat a bump as a small
+porting job rather than a number change.
 
 The X11 layer has no automated coverage — it needs a live X server. It is
 exercised by hand against `xclip`; an Xvfb-based integration test is the
-obvious next addition.
+obvious next addition. The picker is in the same position: its fuzzy matching
+and age formatting are unit-tested, the widgets are not.
 
 ## Roadmap
 
 | Phase | Scope |
 |---|---|
-| **v0.1** | **X11 text capture, CLI, rofi integration** ← you are here |
-| v0.2 | Native picker (egui/iced), global hotkey, fuzzy search |
+| **v0.1** | **X11 text capture, CLI, egui picker, rofi integration** ← you are here |
+| v0.2 | Paste-on-select, picker theming, richer preview pane |
 | v0.3 | Wayland via `wlr-data-control`, images, file URIs |
 | v0.4 | Pinning UX polish, richer snippet management |
 | v1.0 | Encryption at rest, auto-clear, packaging (AUR, deb, Nix) |
