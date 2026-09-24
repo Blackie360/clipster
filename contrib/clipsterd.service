@@ -1,6 +1,6 @@
 [Unit]
 Description=clipster clipboard capture daemon
-Documentation=https://github.com/you/clipster
+Documentation=https://github.com/Blackie360/clipster
 # Capture needs a display server; without one the daemon exits immediately.
 PartOf=graphical-session.target
 After=graphical-session.target
@@ -21,7 +21,13 @@ ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=%h/.local/share/clipster
 ProtectKernelTunables=true
-ProtectKernelModules=true
+# ProtectKernelModules= is deliberately absent. It implies
+# CapabilityBoundingSet=~CAP_SYS_MODULE, and an unprivileged user manager has
+# no CAP_SETPCAP to drop bounding-set capabilities with, so the unit dies at
+# step CAPABILITIES (status 218) before clipsterd ever runs. v0.1.0 shipped it
+# and the daemon never started for anyone. PrivateDevices=, ProtectClock= and
+# ProtectKernelLogs= are out for the same reason; a process that never had
+# CAP_SYS_MODULE cannot load a module regardless.
 ProtectControlGroups=true
 RestrictNamespaces=true
 RestrictSUIDSGID=true

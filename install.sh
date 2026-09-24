@@ -199,6 +199,10 @@ STARTED=0
 if [ "$WANT_SERVICE" -eq 1 ] && user_systemd; then
     systemctl --user daemon-reload
     if systemctl --user enable --now clipsterd.service >/dev/null 2>&1; then
+        # On a reinstall the daemon is already up on the old binary and the
+        # old unit, and `enable --now` leaves a running service alone. Restart
+        # so an upgrade actually takes effect.
+        systemctl --user try-restart clipsterd.service >/dev/null 2>&1 || true
         STARTED=1
         info "clipsterd enabled and started"
     else

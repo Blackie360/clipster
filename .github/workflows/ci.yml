@@ -34,6 +34,38 @@ jobs:
           test -x /tmp/pkgroot/usr/bin/clipsterd
           test -x /tmp/pkgroot/usr/bin/clipster-rofi
 
+      # A systemd *user* manager has no CAP_SETPCAP, so any directive that
+      # implies CapabilityBoundingSet= kills the unit at step CAPABILITIES
+      # (status 218) before clipsterd runs at all. v0.1.0 shipped
+      # ProtectKernelModules= and the daemon never started for anyone.
+      - name: Check clipsterd.service can start under a user manager
+        run: |
+          bad='ProtectKernelModules|PrivateDevices|ProtectClock|ProtectKernelLogs|CapabilityBoundingSet|AmbientCapabilities'
+          for unit in contrib/clipsterd.service \
+                      /tmp/pkgroot/usr/lib/systemd/user/clipsterd.service; do
+            if grep -nE "^[[:space:]]*($bad)=" "$unit"; then
+              echo "::error::$unit sets a directive an unprivileged user manager cannot apply"
+              exit 1
+            fi
+          done
+
+          # The denylist only knows the directives we have been bitten by, so
+          # where the runner has a user manager, start the real sandboxing too.
+          if systemd-run --user --quiet --wait --collect -p PrivateTmp=yes /bin/true 2>/dev/null; then
+            mkdir -p "$HOME/.local/share/clipster"   # ReadWritePaths= must exist
+            props=$(awk '/^\[Service\]/{f=1;next} /^\[/{f=0} f' contrib/clipsterd.service \
+                    | grep -E '^[A-Za-z]+=' \
+                    | grep -vE '^(Type|ExecStart|Restart|RestartSec)=' \
+                    | sed "s|%h|$HOME|g")
+            args=""
+            while IFS= read -r prop; do args="$args -p $prop"; done <<< "$props"
+            systemd-run --user --quiet --wait --collect $args /bin/true \
+              || { echo "::error::the unit's sandboxing will not start under a user manager"; exit 1; }
+            echo "unit starts under a real user manager"
+          else
+            echo "no user manager on this runner; static check only"
+          fi
+
       # install.sh is how most people will get clipster, so run it for real
       # against a tarball shaped like a release one. CLIPSTER_TARBALL skips
       # the download; everything after it is the same code path users hit.
