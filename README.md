@@ -69,7 +69,7 @@ install is about 5 MB.
 It takes a few options — pipe them after `sh -s --`:
 
 ```sh
-curl -fsSL .../install.sh | sh -s -- --version 0.1.0   # pin a release
+curl -fsSL .../install.sh | sh -s -- --version 0.1.1   # pin a release
 curl -fsSL .../install.sh | sh -s -- --prefix ~/apps   # install elsewhere
 curl -fsSL .../install.sh | sh -s -- --no-service      # do not start the daemon
 curl -fsSL .../install.sh | sh -s -- --uninstall       # remove it again
@@ -87,8 +87,8 @@ instead. Build `clipster-ui` from source if you want the native window.
 ### Debian / Ubuntu
 
 ```sh
-gh release download v0.1.0 --pattern '*_amd64.deb'   # or *_arm64.deb
-sudo dpkg -i clipster_0.1.0_amd64.deb
+gh release download v0.1.1 --pattern '*_amd64.deb'   # or *_arm64.deb
+sudo dpkg -i clipster_0.1.1_amd64.deb
 ```
 
 ### Any distro (prebuilt static binary)
@@ -97,9 +97,9 @@ The release tarballs are statically linked against musl, so they carry no
 libc dependency and run on any x86_64 or aarch64 Linux.
 
 ```sh
-gh release download v0.1.0 --pattern '*x86_64-unknown-linux-musl.tar.gz'
-tar xzf clipster-0.1.0-x86_64-unknown-linux-musl.tar.gz
-cd clipster-0.1.0-x86_64-unknown-linux-musl
+gh release download v0.1.1 --pattern '*x86_64-unknown-linux-musl.tar.gz'
+tar xzf clipster-0.1.1-x86_64-unknown-linux-musl.tar.gz
+cd clipster-0.1.1-x86_64-unknown-linux-musl
 install -Dm755 clipster clipsterd     -t ~/.local/bin/
 install -Dm755 clipster-rofi.sh        ~/.local/bin/clipster-rofi
 install -Dm644 clipsterd.service       ~/.config/systemd/user/clipsterd.service
