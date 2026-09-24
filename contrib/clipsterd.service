@@ -1,0 +1,34 @@
+[Unit]
+Description=clipster clipboard capture daemon
+Documentation=https://github.com/you/clipster
+# Capture needs a display server; without one the daemon exits immediately.
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/clipsterd
+# The PRD asks for auto-restart on crash. RestartSec keeps a persistently
+# failing daemon (no DISPLAY, for instance) from spinning in a tight loop.
+Restart=always
+RestartSec=2s
+
+# The daemon touches exactly three places: its data dir, its runtime dir, and
+# the display socket. Everything else is off the table.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/clipster
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+MemoryDenyWriteExecute=true
+LockPersonality=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=graphical-session.target

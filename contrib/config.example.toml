@@ -1,0 +1,37 @@
+# clipster configuration — copy to ~/.config/clipster/config.toml
+#
+# Every key is optional; omitted keys use the defaults shown here. The daemon
+# picks up changes without a restart (it re-reads the file when its mtime
+# changes). An unknown key is a hard error rather than a silent no-op, so a
+# typo shows up in the daemon log instead of quietly doing nothing.
+
+# Unpinned entries retained, newest first. Pinned entries are never counted
+# against this and never evicted.
+history_size = 500
+
+# Entries larger than this are not stored. Keeps a stray 200MB copy out of
+# the history and out of the daemon's resident set.
+max_item_bytes = 1048576
+
+# Ignore entries that contain nothing but whitespace.
+ignore_whitespace_only = true
+
+[privacy]
+# Window classes whose clipboard writes are never recorded. Matched as a
+# case-insensitive substring against both halves of WM_CLASS, so "keepassxc"
+# matches "org.keepassxc.KeePassXC".
+#
+# Setting this to [] disables the protection entirely. Think before you do:
+# anything captured is written to a plaintext SQLite file, and clearing the
+# history afterwards does not un-write it. Encryption at rest is v1.0.
+#
+# Find an app's class with:  xprop WM_CLASS
+denylist = [
+    "keepassxc",
+    "keepass",
+    "1password",
+    "bitwarden",
+    "enpass",
+    "keeper",
+    "seahorse",
+]

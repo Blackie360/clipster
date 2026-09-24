@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = ["crates/clipster-core", "crates/clipsterd", "crates/clipster"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+clipster-core = { path = "crates/clipster-core" }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+log = "0.4"
+env_logger = "0.11"
+clap = { version = "4", features = ["derive"] }
+
+# The PRD budgets <15MB idle RSS and <50ms picker launch. Both are easier to
+# hit if the release build is actually optimized, so make that the default.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

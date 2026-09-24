@@ -1,0 +1,15 @@
+[package]
+name = "clipsterd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "clipster clipboard capture daemon"
+
+[dependencies]
+clipster-core.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+log.workspace = true
+env_logger.workspace = true
+clap.workspace = true
+x11rb = { version = "0.14", features = ["xfixes"] }

@@ -1,0 +1,12 @@
+[package]
+name = "clipster"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "clipster command-line client"
+
+[dependencies]
+clipster-core.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+clap.workspace = true
