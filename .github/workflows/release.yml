@@ -63,8 +63,12 @@ jobs:
           for bin in clipster clipsterd; do
             path="target/${{ matrix.target }}/release/$bin"
             file "$path"
-            if ! file "$path" | grep -q 'statically linked'; then
-              echo "::error::$bin is not statically linked" && exit 1
+            # Match the invariant, not the wording: rustc emits static-pie on
+            # x86_64-musl and plain static on aarch64-musl, and `file`
+            # describes those differently. Both are static; what neither has
+            # is a DT_NEEDED entry naming a shared library.
+            if readelf -d "$path" 2>/dev/null | grep -q 'NEEDED'; then
+              echo "::error::$bin links shared libraries" && exit 1
             fi
           done
 
